@@ -1,520 +1,338 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import axios from 'axios';
 
-// API endpoint (Backend running on port 8001)
-const API_BASE_URL = 'http://localhost:8001';
+// --- UPDATED IMPORT: Now using .png ---
+import bgImage from './Background.png'; 
 
-export default function App() {
-  // State management
-  const [selectedFile, setSelectedFile] = useState(null);
+// --- STYLES ---
+const styles = {
+  container: {
+    fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    backgroundColor: '#f8f9fa',
+    minHeight: '100vh',
+    color: '#333',
+  },
+  navbar: {
+    backgroundColor: '#fff',
+    padding: '15px 40px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1000,
+  },
+  logo: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    color: '#007bff', // Medical Blue
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  hero: {
+    backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("https://images.unsplash.com/photo-1579684385127-1ef15d508118?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80")',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    height: '400px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    color: 'white',
+    textAlign: 'center',
+    padding: '20px',
+  },
+  section: {
+    maxWidth: '1000px',
+    margin: '40px auto',
+    padding: '0 20px',
+  },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    padding: '30px',
+    boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
+    marginBottom: '20px',
+  },
+  buttonPrimary: {
+    backgroundColor: '#007bff',
+    color: 'white',
+    border: 'none',
+    padding: '12px 30px',
+    fontSize: '18px',
+    borderRadius: '30px',
+    cursor: 'pointer',
+    transition: 'background 0.3s',
+    fontWeight: '600',
+    marginTop: '20px',
+  },
+  buttonSecondary: {
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    marginTop: '10px',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '40px',
+    marginTop: '20px',
+  },
+  statusCard: (isHealthy) => ({
+    backgroundColor: isHealthy ? '#d1e7dd' : '#f8d7da',
+    color: isHealthy ? '#0f5132' : '#842029',
+    padding: '20px',
+    borderRadius: '10px',
+    textAlign: 'center',
+    marginBottom: '20px',
+    border: `1px solid ${isHealthy ? '#badbcc' : '#f5c2c7'}`,
+  }),
+};
+
+function App() {
+  const [view, setView] = useState('home'); // 'home' or 'predict'
+  const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // Handle file selection
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      // Validate file type
-      const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/bmp'];
-      if (!validTypes.includes(file.type)) {
-        setError('❌ Please select a valid image file (PNG, JPG, BMP)');
-        setSelectedFile(null);
-        setPreview(null);
-        return;
-      }
-
-      // Validate file size (max 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        setError('❌ File size too large. Maximum 10MB allowed.');
-        setSelectedFile(null);
-        setPreview(null);
-        return;
-      }
-
-      setSelectedFile(file);
-      setError(null);
-
-      // Generate preview
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPreview(e.target.result);
-      };
-      reader.readAsDataURL(file);
+  // --- API LOGIC ---
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setPreview(URL.createObjectURL(selectedFile));
+      setResult(null);
     }
   };
 
-  // Handle drag and drop
-  const handleDragOver = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = 'copy';
-  };
-
-  const handleDrop = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const files = event.dataTransfer.files;
-    if (files.length > 0) {
-      handleFileSelect({ target: { files } });
-    }
-  };
-
-  // Handle prediction
-  const handleAnalyze = async () => {
-    if (!selectedFile) {
-      setError('❌ Please select an image first');
-      return;
-    }
-
+  const handleUpload = async () => {
+    if (!file) return;
     setLoading(true);
-    setError(null);
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const response = await axios.post(`${API_BASE_URL}/predict`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.data.status === 'success') {
-        setResult(response.data);
-      }
-    } catch (err) {
-      const errorMsg = err.response?.data?.detail || err.message || 'Unknown error occurred';
-      setError(`❌ Analysis failed: ${errorMsg}`);
-      console.error('API Error:', err);
-    } finally {
-      setLoading(false);
+      // Ensure this matches your backend URL/Port
+      const response = await axios.post('http://127.0.0.1:8001/predict', formData);
+      setResult(response.data);
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error connecting to backend API. Is uvicorn running?");
     }
+    setLoading(false);
   };
 
-  // Get color based on diagnosis severity
-  const getResultColor = () => {
-    if (!result) return '#3b82f6';
-    const diagnosis = result.diagnosis.toLowerCase();
-    if (diagnosis === 'no dr') return '#10b981'; // Green
-    if (diagnosis === 'mild') return '#f59e0b'; // Amber
-    if (diagnosis === 'moderate') return '#ef6b42'; // Orange
-    if (diagnosis === 'severe' || diagnosis === 'proliferative') return '#dc2626'; // Red
-    return '#3b82f6';
+  const handleReset = () => {
+    if (preview) {
+      try { URL.revokeObjectURL(preview); } catch (e) { /* ignore */ }
+    }
+    setFile(null);
+    setPreview(null);
+    setResult(null);
+    if (fileInputRef.current) fileInputRef.current.value = null;
   };
 
-  // Styles
-  const styles = {
-    container: {
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px',
-      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    },
-    header: {
-      background: 'rgba(255, 255, 255, 0.95)',
-      padding: '30px 20px',
-      borderRadius: '12px',
-      marginBottom: '30px',
-      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
-      textAlign: 'center',
-    },
-    headerTitle: {
-      fontSize: '32px',
-      fontWeight: 'bold',
-      color: '#1f2937',
-      margin: '0 0 10px 0',
-    },
-    headerSubtitle: {
-      fontSize: '14px',
-      color: '#6b7280',
-      margin: '0',
-    },
-    mainContent: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '30px',
-      maxWidth: '1200px',
-      margin: '0 auto',
-    },
-    column: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '20px',
-    },
-    card: {
-      background: 'white',
-      borderRadius: '12px',
-      padding: '30px',
-      boxShadow: '0 10px 40px rgba(0, 0, 0, 0.1)',
-    },
-    uploadArea: {
-      border: '2px dashed #cbd5e1',
-      borderRadius: '12px',
-      padding: '40px 20px',
-      textAlign: 'center',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      backgroundColor: '#f8fafc',
-    },
-    uploadAreaHover: {
-      borderColor: '#667eea',
-      backgroundColor: '#f0f4ff',
-    },
-    uploadText: {
-      fontSize: '16px',
-      color: '#6b7280',
-      margin: '0 0 10px 0',
-    },
-    uploadIcon: {
-      fontSize: '40px',
-      marginBottom: '10px',
-    },
-    fileInput: {
-      display: 'none',
-    },
-    previewImage: {
-      width: '100%',
-      maxHeight: '300px',
-      objectFit: 'contain',
-      borderRadius: '8px',
-      marginBottom: '20px',
-      border: '1px solid #e5e7eb',
-    },
-    fileName: {
-      fontSize: '14px',
-      color: '#6b7280',
-      marginBottom: '15px',
-      fontWeight: '500',
-    },
-    button: {
-      padding: '12px 24px',
-      fontSize: '16px',
-      fontWeight: '600',
-      border: 'none',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      width: '100%',
-    },
-    analyzeButton: {
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
-      fontSize: '16px',
-      fontWeight: '600',
-      padding: '14px 28px',
-      border: 'none',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      transition: 'all 0.3s ease',
-      width: '100%',
-      marginTop: '10px',
-    },
-    analyzeButtonDisabled: {
-      opacity: '0.6',
-      cursor: 'not-allowed',
-    },
-    resultCard: {
-      borderLeft: `6px solid ${getResultColor()}`,
-      background: `rgba(${parseInt(getResultColor().slice(1, 3), 16)}, ${parseInt(getResultColor().slice(3, 5), 16)}, ${parseInt(getResultColor().slice(5, 7), 16)}, 0.05)`,
-    },
-    resultTitle: {
-      fontSize: '24px',
-      fontWeight: 'bold',
-      color: getResultColor(),
-      margin: '0 0 15px 0',
-    },
-    resultSeverity: {
-      fontSize: '14px',
-      color: '#6b7280',
-      marginBottom: '10px',
-      fontWeight: '500',
-    },
-    confidenceValue: {
-      fontSize: '28px',
-      fontWeight: 'bold',
-      color: getResultColor(),
-      marginBottom: '15px',
-    },
-    confidenceLabel: {
-      fontSize: '14px',
-      color: '#6b7280',
-      marginBottom: '20px',
-    },
-    probabilityItem: {
-      marginBottom: '15px',
-    },
-    probabilityLabel: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      fontSize: '13px',
-      fontWeight: '500',
-      color: '#374151',
-      marginBottom: '5px',
-    },
-    probabilityBar: {
-      height: '8px',
-      backgroundColor: '#e5e7eb',
-      borderRadius: '4px',
-      overflow: 'hidden',
-    },
-    probabilityFill: (percentage) => ({
-      height: '100%',
-      background: `linear-gradient(90deg, #667eea 0%, #764ba2 100%)`,
-      width: `${percentage}%`,
-      transition: 'width 0.5s ease',
-    }),
-    recommendationBox: {
-      background: '#f0f9ff',
-      border: '1px solid #7dd3fc',
-      borderRadius: '8px',
-      padding: '12px',
-      marginTop: '15px',
-      fontSize: '13px',
-      color: '#0369a1',
-      lineHeight: '1.5',
-    },
-    errorBox: {
-      background: '#fee2e2',
-      border: '1px solid #fca5a5',
-      borderRadius: '8px',
-      padding: '12px',
-      color: '#991b1b',
-      fontSize: '14px',
-    },
-    loadingSpinner: {
-      display: 'inline-block',
-      width: '20px',
-      height: '20px',
-      border: '3px solid #f3f4f6',
-      borderTop: '3px solid #667eea',
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite',
-    },
-    noResultsText: {
-      color: '#9ca3af',
-      fontSize: '14px',
-      textAlign: 'center',
-      padding: '40px 20px',
-    },
-  };
+  // --- VIEWS ---
 
-  // Responsive layout for mobile
-  const mainContentStyle = {
-    ...styles.mainContent,
-    '@media (max-width: 768px)': {
-      gridTemplateColumns: '1fr',
-    },
-  };
-
-  return (
-    <div style={styles.container}>
-      <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @media (max-width: 768px) {
-          body {
-            margin: 0;
-            padding: 0;
-          }
-        }
-      `}</style>
-
-      {/* Header */}
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>🏥 DR Detection Dashboard</h1>
-        <p style={styles.headerSubtitle}>AI-Powered Diabetic Retinopathy Detection System</p>
+  const LandingPage = () => (
+    <>
+      <div style={styles.hero}>
+        <h1 style={{ fontSize: '3.5rem', marginBottom: '10px' }}>Protect Your Vision</h1>
+        <p style={{ fontSize: '1.2rem', maxWidth: '700px' }}>
+          An advanced Cyber-Physical System using Fusion Deep Learning (VGG16 + ResNet50 + DenseNet121) 
+          for early detection of Diabetic Retinopathy.
+        </p>
+        <button style={styles.buttonPrimary} onClick={() => setView('predict')}>
+          Start Diagnosis Now
+        </button>
       </div>
 
-      {/* Main Content */}
-      <div style={mainContentStyle}>
-        {/* Left Column: Upload & Control */}
-        <div style={styles.column}>
-          {/* Upload Area Card */}
+      <div style={styles.section}>
+        <div style={styles.grid}>
           <div style={styles.card}>
-            <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#1f2937', margin: '0 0 15px 0' }}>
-              📁 Upload Retinal Image
-            </h2>
-            <div
-              style={styles.uploadArea}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById('fileInput').click()}
-            >
-              <div style={styles.uploadIcon}>📷</div>
-              <p style={styles.uploadText}>
-                <strong>Click to upload</strong> or drag and drop
-              </p>
-              <p style={{ fontSize: '12px', color: '#9ca3af', margin: '0' }}>
-                PNG, JPG, BMP • Max 10MB
-              </p>
-            </div>
-            <input
-              id="fileInput"
-              type="file"
-              style={styles.fileInput}
-              onChange={handleFileSelect}
-              accept="image/*"
+            <h2 style={{color: '#007bff'}}>👁️ What is Diabetic Retinopathy?</h2>
+            <p style={{lineHeight: '1.6'}}>
+              Diabetic Retinopathy (DR) is a complication of diabetes that affects the eyes. 
+              It's caused by damage to the blood vessels of the light-sensitive tissue at the 
+              back of the eye (retina). Early detection is critical to prevent blindness.
+            </p>
+            <img 
+              src="https://media.nature.com/lw767/magazine-assets/d41586-018-00004-w/d41586-018-00004-w_15324492.jpg" 
+              alt="Retina" 
+              style={{width: '100%', borderRadius: '10px', marginTop: '15px'}}
             />
+            <p style={{fontSize: '0.8rem', color: '#666', marginTop: '5px'}}>Fig 1. Healthy Retina Structure</p>
+          </div>
 
-            {/* Preview */}
-            {preview && (
-              <>
-                <img src={preview} alt="Preview" style={styles.previewImage} />
-                <div style={styles.fileName}>
-                  ✅ {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
-                </div>
-              </>
-            )}
+          <div style={styles.card}>
+            <h2 style={{color: '#007bff'}}>🤖 How Our System Works</h2>
+            <p style={{lineHeight: '1.6'}}>
+              We utilize a <strong>Cyber-Physical Architecture</strong> where the image sensor data is processed 
+              by a Fusion AI model in the cloud.
+            </p>
+            <ul style={{lineHeight: '1.8'}}>
+              <li><strong>Step 1:</strong> Circular Cropping & Gaussian Blur preprocessing.</li>
+              <li><strong>Step 2:</strong> Feature extraction via ResNet, VGG, and DenseNet.</li>
+              <li><strong>Step 3:</strong> Attention-Guided feature fusion.</li>
+              <li><strong>Step 4:</strong> Real-time diagnosis display.</li>
+            </ul>
+            <div style={{backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', marginTop: '15px'}}>
+              <strong>Accuracy:</strong> 90.25% <br/>
+              <strong>Kappa Score:</strong> 0.812 (Strong Agreement)
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 
-            {/* Error Message */}
-            {error && <div style={styles.errorBox}>{error}</div>}
+  const PredictionPage = () => (
+    // UPDATED: Using the imported bgImage variable
+    <div style={{
+        backgroundImage: `url(${bgImage})`, 
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        minHeight: 'calc(100vh - 74px)', 
+        width: '100%',
+        paddingTop: '1px' 
+    }}>
+      <div style={styles.section}>
+        <button style={{...styles.buttonSecondary, marginBottom: '20px'}} onClick={() => setView('home')}>
+          ← Back to Home
+        </button>
 
-            {/* Analyze Button */}
-            <button
+        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px'}}>
+          
+          {/* LEFT: UPLOAD */}
+          <div style={styles.card}>
+            <h3 style={{marginTop: 0}}>1. Upload Patient Scan</h3>
+            <div style={{
+              border: '2px dashed #007bff', 
+              borderRadius: '10px', 
+              padding: '40px', 
+              textAlign: 'center',
+              backgroundColor: '#f8f9fa',
+              cursor: 'pointer'
+            }}>
+              <input 
+                ref={fileInputRef}
+                type="file" 
+                onChange={handleFileChange} 
+                accept="image/*" 
+                style={{display: 'none'}} 
+                id="file-upload"
+              />
+              <label htmlFor="file-upload" style={{cursor: 'pointer', display: 'block'}}>
+                {preview ? (
+                  <img src={preview} alt="Preview" style={{maxWidth: '100%', maxHeight: '300px', borderRadius: '8px'}} />
+                ) : (
+                  <div>
+                    <span style={{fontSize: '40px'}}>📂</span>
+                    <p>Click to Upload Fundus Image</p>
+                  </div>
+                )}
+              </label>
+            </div>
+
+            <button 
               style={{
-                ...styles.analyzeButton,
-                ...(loading || !selectedFile ? styles.analyzeButtonDisabled : {}),
-              }}
-              onClick={handleAnalyze}
-              disabled={loading || !selectedFile}
+                ...styles.buttonPrimary, 
+                width: '100%', 
+                opacity: (!file || loading) ? 0.6 : 1,
+                cursor: (!file || loading) ? 'not-allowed' : 'pointer'
+              }} 
+              onClick={handleUpload}
+              disabled={!file || loading}
             >
-              {loading ? (
-                <>
-                  <span style={styles.loadingSpinner}></span> Analyzing...
-                </>
-              ) : (
-                '⚡ Analyze Image'
-              )}
+              {loading ? "Analyzing Retina..." : "Run AI Diagnosis"}
             </button>
           </div>
 
-          {/* Info Card */}
-          {!result && !loading && (
-            <div style={styles.card}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937', margin: '0 0 12px 0' }}>
-                ℹ️ Instructions
-              </h3>
-              <ul
-                style={{
-                  fontSize: '13px',
-                  color: '#6b7280',
-                  lineHeight: '1.8',
-                  margin: '0',
-                  paddingLeft: '20px',
-                }}
-              >
-                <li>Upload a retinal fundus image</li>
-                <li>Click "Analyze Image" to run AI prediction</li>
-                <li>Results will appear on the right panel</li>
-                <li>High quality images work best</li>
-              </ul>
-            </div>
-          )}
-        </div>
-
-        {/* Right Column: Results */}
-        <div style={styles.column}>
-          {result ? (
-            <div style={{ ...styles.card, ...styles.resultCard }}>
-              <h2 style={styles.resultTitle}>🔍 Analysis Result</h2>
-
-              <div style={styles.resultSeverity}>
-                Severity: <strong>{result.severity}</strong>
+          {/* RIGHT: RESULTS */}
+          <div style={styles.card}>
+            <h3 style={{marginTop: 0}}>2. Analysis Results</h3>
+            
+            {!result && (
+              <div style={{textAlign: 'center', padding: '40px', color: '#888'}}>
+                <span style={{fontSize: '40px'}}>🩺</span>
+                <p>Upload an image and run diagnosis to see results here.</p>
               </div>
+            )}
 
-              <div style={styles.confidenceValue}>{result.diagnosis}</div>
-              <div style={styles.confidenceLabel}>
-                Confidence: <strong>{(result.confidence * 100).toFixed(1)}%</strong>
-              </div>
+            {result && (
+              <div style={{animation: 'fadeIn 0.5s'}}>
+                <div style={styles.statusCard(result.diagnosis === "No DR (Healthy)")}>
+                  <h2 style={{margin: 0}}>{result.diagnosis}</h2>
+                  <p style={{margin: '5px 0 0 0'}}>Confidence: {(result.confidence * 100).toFixed(2)}%</p>
+                </div>
 
-              {/* Probability Bars */}
-              <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-                <h4
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: '#1f2937',
-                    margin: '0 0 15px 0',
-                  }}
-                >
-                  📊 Probability Distribution
-                </h4>
-                {Object.entries(result.probabilities).map(([className, probability]) => (
-                  <div key={className} style={styles.probabilityItem}>
-                    <div style={styles.probabilityLabel}>
-                      <span>{className}</span>
-                      <span>{(probability * 100).toFixed(1)}%</span>
+                <h4>Detailed Probability Distribution:</h4>
+                {Object.entries(result.probabilities).map(([stage, prob]) => (
+                  <div key={stage} style={{marginBottom: '12px'}}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px'}}>
+                      <span style={{fontWeight: stage === result.diagnosis ? 'bold' : 'normal'}}>{stage}</span>
+                      <span>{(prob * 100).toFixed(1)}%</span>
                     </div>
-                    <div style={styles.probabilityBar}>
-                      <div
-                        style={styles.probabilityFill(probability * 100)}
-                      />
+                    <div style={{width: '100%', height: '8px', backgroundColor: '#e9ecef', borderRadius: '4px'}}>
+                      <div style={{
+                        width: `${prob * 100}%`,
+                        height: '100%',
+                        backgroundColor: stage === result.diagnosis ? '#007bff' : '#adb5bd',
+                        borderRadius: '4px',
+                        transition: 'width 1s ease-in-out'
+                      }}></div>
                     </div>
                   </div>
                 ))}
-              </div>
 
-              {/* Recommendation */}
-              <div style={styles.recommendationBox}>
-                <strong>📋 Recommended Action:</strong>
-                <div style={{ marginTop: '8px' }}>{result.recommended_action}</div>
-              </div>
+                <div style={{marginTop: '18px', display: 'flex', gap: '10px'}}>
+                  <button
+                    style={{...styles.buttonSecondary}}
+                    onClick={() => {
+                      handleReset();
+                      if (fileInputRef.current) fileInputRef.current.click();
+                    }}
+                  >
+                    Run Another Diagnosis
+                  </button>
 
-              {/* Reset Button */}
-              <button
-                style={{
-                  ...styles.button,
-                  background: '#f3f4f6',
-                  color: '#374151',
-                  marginTop: '20px',
-                }}
-                onClick={() => {
-                  setResult(null);
-                  setSelectedFile(null);
-                  setPreview(null);
-                  setError(null);
-                }}
-              >
-                🔄 Analyze Another Image
-              </button>
-            </div>
-          ) : (
-            <div style={styles.card}>
-              <div style={styles.noResultsText}>
-                {loading ? (
-                  <>
-                    <div style={{ ...styles.loadingSpinner, margin: '20px auto' }}></div>
-                    <p style={{ marginTop: '20px' }}>Analyzing retinal image...</p>
-                    <p style={{ fontSize: '12px' }}>This may take a moment</p>
-                  </>
-                ) : (
-                  <>
-                    <p style={{ fontSize: '16px', marginBottom: '10px' }}>👈 Upload an image to get started</p>
-                    <p style={{ fontSize: '12px' }}>Results will appear here</p>
-                  </>
-                )}
+                  <button
+                    style={{...styles.buttonSecondary}}
+                    onClick={handleReset}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* Footer */}
-      <div
-        style={{
-          textAlign: 'center',
-          marginTop: '40px',
-          color: 'rgba(255, 255, 255, 0.7)',
-          fontSize: '12px',
-        }}
-      >
-        <p>
-          🩺 Cyber-Physical Diabetic Retinopathy Detection System v1.0 | AI-Powered Diagnosis
-        </p>
       </div>
     </div>
   );
+
+  return (
+    <div style={styles.container}>
+      <nav style={styles.navbar}>
+        <div style={styles.logo}>
+          <span>👁️</span> RetinaAI Pro
+        </div>
+        <div>
+          <span style={{marginRight: '15px', color: 'green', fontWeight: 'bold'}}>● System Online</span>
+        </div>
+      </nav>
+
+      {view === 'home' ? <LandingPage /> : <PredictionPage />}
+    </div>
+  );
 }
+
+export default App;
