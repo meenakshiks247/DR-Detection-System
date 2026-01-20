@@ -2,7 +2,6 @@ import os
 import io
 import cv2
 import numpy as np
-import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TF logs
 import warnings
 warnings.filterwarnings('ignore')
@@ -10,14 +9,13 @@ warnings.filterwarnings('ignore')
 # Defer heavy TensorFlow import until model load to allow the API to start fast
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from PIL import Image
 import logging
 import sys
 
 # --- CONFIGURATION ---
-MODEL_FILENAME = "fusion_dr_model_final.keras"
-BACKUP_FILENAME = "fusion_dr_model.h5"
+MODEL_FILENAME = "fusion_dr_model.h5"  # Changed to .h5 format
+BACKUP_FILENAME = "fusion_dr_model.keras"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -77,13 +75,12 @@ def get_model():
         logger.info(f"🔄 Loading model from: {path_final}")
         try:
             # Include any custom objects required by the saved model
-            model = tf.keras.models.load_model(
-                path_final,
-                custom_objects={
-                    'ModelFusionLayer': ModelFusionLayer,
-                    'focal_loss_fn': focal_loss_fn
-                }
-            )
+            import keras
+            keras.config.enable_unsafe_deserialization()
+            model = tf.keras.models.load_model(path_final, custom_objects={
+                'ModelFusionLayer': ModelFusionLayer,
+                'focal_loss_fn': focal_loss_fn
+            }, safe_mode=False)
             logger.info("✅ Model loaded successfully")
         except Exception as e:
             logger.exception(f"Failed to load model: {e}")
@@ -127,18 +124,22 @@ app.add_middleware(
 
 # --- PREPROCESSING ---
 def preprocess_image(image_bytes):
-    image = Image.open(io.BytesIO(image_bytes))
-    img = np.array(image)
-    if img.ndim == 2:
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    elif img.shape[2] == 4:
-        img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-    
-    # Resize & Normalize
-    img = cv2.resize(img, (224, 224))
-    img = img.astype(np.float32) / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img
+    """Preprocess image with error handling for invalid files"""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        img = np.array(image)
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        elif img.shape[2] == 4:
+            img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+        
+        # Resize & Normalize
+        img = cv2.resize(img, (224, 224))
+        img = img.astype(np.float32) / 255.0
+        img = np.expand_dims(img, axis=0)
+        return img
+    except Exception as e:
+        raise ValueError(f"Invalid image file: {str(e)}")
 
 
 def preprocess_image_generalist(image_bytes):
@@ -162,15 +163,29 @@ def home():
 
 @app.get("/health")
 def health():
+<<<<<<< HEAD
     """Health check endpoint - doesn't load model to prevent blocking startup"""
     return {
         "status": "healthy",
         "model_loaded": model is not None,
+=======
+    """Health check endpoint"""
+    try:
+        m = get_model()
+        model_loaded = True
+    except:
+        model_loaded = False
+    
+    return {
+        "status": "healthy",
+        "model_loaded": model_loaded,
+>>>>>>> b1337cb4b9590054c1132c984cacaa1e9943fc19
         "service": "DR Detection API"
     }
 
 @app.get("/model-info")
 def model_info():
+<<<<<<< HEAD
     """Get model information - doesn't load model"""
     return {
         "model_name": "Fusion DR Model (Final)",
@@ -181,10 +196,34 @@ def model_info():
         "classes": list(CLASS_NAMES.values()),
         "status": "Model will be loaded on first prediction request"
     }
+=======
+    """Return model metadata"""
+    try:
+        m = get_model()
+        return {
+            "model_name": "Fusion DR Model",
+            "architecture": "VGG16 + ResNet50 + DenseNet121 (Parallel Fusion)",
+            "input_shape": [224, 224, 3],
+            "num_classes": 5,
+            "total_parameters": m.count_params(),
+            "classes": list(CLASS_NAMES.values())
+        }
+    except Exception as e:
+        logger.error(f"Model info error: {e}")
+        raise HTTPException(status_code=503, detail=str(e))
+>>>>>>> b1337cb4b9590054c1132c984cacaa1e9943fc19
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
+        # Validate file type
+        allowed_types = {'image/png', 'image/jpeg', 'image/bmp', 'image/jpg'}
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid file type. Allowed: PNG, JPG, BMP. Got: {file.content_type}"
+            )
+        
         # Ensure model is loaded (lazy load on first request)
         try:
             m = get_model()
@@ -193,9 +232,21 @@ async def predict(file: UploadFile = File(...)):
             raise HTTPException(status_code=503, detail=str(e))
 
         contents = await file.read()
+<<<<<<< HEAD
 
         # Preprocess for fusion DR model (224x224)
         processed_img = preprocess_image(contents)
+=======
+        
+        # Validate file size
+        if len(contents) > 10 * 1024 * 1024:  # 10MB max
+            raise HTTPException(status_code=413, detail="File too large. Max 10MB")
+        
+        try:
+            processed_img = preprocess_image(contents)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+>>>>>>> b1337cb4b9590054c1132c984cacaa1e9943fc19
 
         # Preprocess for generalist model (128x128)
         processed_img_gen = preprocess_image_generalist(contents)
@@ -254,6 +305,8 @@ async def predict(file: UploadFile = File(...)):
 
         return JSONResponse(content=response)
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Prediction Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

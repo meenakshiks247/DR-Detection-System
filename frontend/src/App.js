@@ -1,8 +1,5 @@
 import React, { useState, useRef } from 'react';
-import axios from 'axios';
-
-// --- UPDATED IMPORT: Now using .png ---
-import bgImage from './Background.png'; 
+import axios from 'axios'; 
 
 // --- STYLES ---
 const styles = {
@@ -195,9 +192,8 @@ function App() {
   );
 
   const PredictionPage = () => (
-    // UPDATED: Using the imported bgImage variable
     <div style={{
-        backgroundImage: `url(${bgImage})`, 
+        backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url("https://images.unsplash.com/photo-1579684385127-1ef15d508118?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80")',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed',
