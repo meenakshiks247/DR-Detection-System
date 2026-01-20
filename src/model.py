@@ -5,26 +5,10 @@ from tensorflow.keras import Model
 from tensorflow.keras.layers import (Input, BatchNormalization, GlobalAveragePooling2D,
                                      Dense, Multiply, Conv2D, Flatten, Dropout)
 from tensorflow.keras.applications import VGG16, ResNet50, DenseNet121
+import keras
 
 
-def attention_block(x):
-    """Simple channel attention block as described in the spec.
-
-    BN -> GAP -> FC -> FC -> Multiply
-    """
-    from tensorflow.keras.layers import Reshape
-    channels = x.shape[-1]
-    bn = BatchNormalization()(x)
-    gap = GlobalAveragePooling2D()(bn)
-    # bottleneck
-    hidden = max(16, channels // 16)
-    fc1 = Dense(hidden, activation="relu")(gap)
-    fc2 = Dense(channels, activation="sigmoid")(fc1)
-    scale = Reshape((1, 1, channels))(fc2)
-    out = Multiply()([x, scale])
-    return out
-
-
+@keras.saving.register_keras_serializable(package="DR_Detection")
 class ModelFusionLayer(tf.keras.layers.Layer):
     """Custom layer that learns a unique weight for each feature channel across the 3 models.
 
@@ -58,6 +42,24 @@ class ModelFusionLayer(tf.keras.layers.Layer):
         weighted = x * w
         fused = tf.reduce_sum(weighted, axis=-2)  # sum over models -> (batch,h,w,channels)
         return fused
+
+
+def attention_block(x):
+    """Simple channel attention block as described in the spec.
+
+    BN -> GAP -> FC -> FC -> Multiply
+    """
+    from tensorflow.keras.layers import Reshape
+    channels = x.shape[-1]
+    bn = BatchNormalization()(x)
+    gap = GlobalAveragePooling2D()(bn)
+    # bottleneck
+    hidden = max(16, channels // 16)
+    fc1 = Dense(hidden, activation="relu")(gap)
+    fc2 = Dense(channels, activation="sigmoid")(fc1)
+    scale = Reshape((1, 1, channels))(fc2)
+    out = Multiply()([x, scale])
+    return out
 
 
 def build_fusion_model(input_shape=(224, 224, 3), num_classes=5):

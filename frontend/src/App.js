@@ -121,6 +121,7 @@ function App() {
     try {
       // Ensure this matches your backend URL/Port
       const response = await axios.post('http://127.0.0.1:8001/predict', formData);
+      // Backend now returns { dr_result, other_condition, generalist_result, ai_advice }
       setResult(response.data);
     } catch (error) {
       console.error("Error:", error);
@@ -269,13 +270,41 @@ function App() {
 
             {result && (
               <div style={{animation: 'fadeIn 0.5s'}}>
-                <div style={styles.statusCard(result.diagnosis === "No DR (Healthy)")}>
-                  <h2 style={{margin: 0}}>{result.diagnosis}</h2>
-                  <p style={{margin: '5px 0 0 0'}}>Confidence: {(result.confidence * 100).toFixed(2)}%</p>
-                </div>
+                {(() => {
+                  const dr = result.dr_result || {};
+                  const other = result.other_condition || null;
+                  const isHealthy = dr.diagnosis === 'No DR' || dr.diagnosis === 'No DR (Healthy)';
+                  return (
+                    <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'}}>
+                      <div style={styles.statusCard(isHealthy)}>
+                        <h2 style={{margin: 0}}>{dr.diagnosis}</h2>
+                        <p style={{margin: '5px 0 0 0'}}>Confidence: {(dr.confidence * 100).toFixed(2)}%</p>
+                      </div>
+
+                      {/* Other condition badge */}
+                      <div style={{minWidth: '160px', textAlign: 'right'}}>
+                        {other ? (
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '8px 12px',
+                            borderRadius: '999px',
+                            backgroundColor: (other.label === 'Cataract' || other.label === 'Glaucoma') ? '#ffedd5' : '#e9f7ef',
+                            color: (other.label === 'Cataract' || other.label === 'Glaucoma') ? '#92400e' : '#0f5132',
+                            fontWeight: 600,
+                            border: (other.label === 'Cataract' || other.label === 'Glaucoma') ? '1px solid #fbbf24' : '1px solid #b7e4c7'
+                          }}>
+                            {other.label} {other.confidence ? `(${(other.confidence*100).toFixed(1)}%)` : ''}
+                          </span>
+                        ) : (
+                          <span style={{color: '#666'}}>Other condition: None</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <h4>Detailed Probability Distribution:</h4>
-                {Object.entries(result.probabilities).map(([stage, prob]) => (
+                {Object.entries((result.dr_result && result.dr_result.probabilities) || {}).map(([stage, prob]) => (
                   <div key={stage} style={{marginBottom: '12px'}}>
                     <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px'}}>
                       <span style={{fontWeight: stage === result.diagnosis ? 'bold' : 'normal'}}>{stage}</span>
@@ -311,6 +340,14 @@ function App() {
                     Clear
                   </button>
                 </div>
+
+                {/* Advice Box */}
+                {result.ai_advice && (
+                  <div style={{marginTop: '20px', padding: '16px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeeba'}}>
+                    <h4 style={{margin: '0 0 8px 0'}}>AI Advice</h4>
+                    <p style={{margin: 0, color: '#7a4f01'}}>{result.ai_advice}</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
