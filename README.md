@@ -13,8 +13,9 @@ python download_models.py
 ```
 
 This downloads:
-- `fusion_dr_model.keras` (277.8 MB) - Primary model
-- `fusion_dr_model.h5` (276.8 MB) - Backup weights
+- `fusion_dr_model.keras` (277.8 MB) - Primary DR detection model
+- `fusion_dr_model.h5` (276.8 MB) - Backup DR weights
+- `generalist_model.h5` (Trained generalist model for multi-class classification)
 - Models stored via Git LFS for efficient storage
 
 **See `MODELS.md` for detailed information.**
@@ -40,7 +41,8 @@ START_SYSTEM.bat
 |-----------|-----|--------|
 | **Web Dashboard** | http://localhost:3000 | ✅ Real-time UI |
 | **AI Model API** | http://localhost:8001 | ✅ REST Endpoints |
-| **Model File** | `fusion_dr_model.keras` | ✅ 53M Parameters |
+| **DR Model File** | `fusion_dr_model.keras` | ✅ 53M Parameters |
+| **Generalist Model** | `generalist_model.h5` | ✅ Multi-class classification |
 
 ---
 
@@ -127,8 +129,9 @@ npm start
 
 - **First Prediction:** ~30 seconds (model loads)
 - **Next Predictions:** ~5-8 seconds
-- **Accuracy:** 77.35% (validation set)
-- **Classes:** 5 (No DR, Mild, Moderate, Severe, Proliferative)
+- **DR Accuracy:** 77.35% (validation set)
+- **DR Classes:** 5 (No DR, Mild, Moderate, Severe, Proliferative)
+- **Generalist Classes:** 4 (Normal, DR, Cataract, Glaucoma)
 
 ---
 
@@ -149,8 +152,10 @@ Input (224×224 RGB)
        ↓
    Classification Head
        ↓
-   5 Classes Output
+   5 Classes Output (DR Stages)
 ```
+
+**Generalist Model:** Trained for multi-class classification (Normal, DR, Cataract, Glaucoma) using a similar architecture.
 
 ---
 
@@ -194,6 +199,6 @@ Your Diabetic Retinopathy Detection System is fully installed and ready to use.
 
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** November 30, 2025  
+**Version:** 1.1.0  
+**Last Updated:** January 27, 2026  
 **Status:** ✅ Production Ready
