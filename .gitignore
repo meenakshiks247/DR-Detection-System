@@ -54,6 +54,7 @@ frontend/build/
 # Data
 data/train_images/
 data/test_images/
+dataset_generalist/
 evaluation/
 *.csv
 
